@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>⚖️ Словесные весы</title>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+:root{
+  --bg:#0b1020; --card:#151b34; --accent:#ffd166; --accent2:#7bdff2;
+  --left:#ff6b9d; --right:#4ecdc4; --text:#f1f3ff; --ok:#7ee2a8; --bad:#ff8fa3;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(ellipse at 50% -20%,#1a2350,#0b1020 60%);color:var(--text);min-height:100vh;overflow-x:hidden}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:14px;font-weight:700}
+input,textarea{font-family:inherit}
+.hidden{display:none!important}
+
+/* ---------- СТАРТ ---------- */
+#startScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;gap:18px}
+.logo{font-size:72px;animation:sway 3s ease-in-out infinite;transform-origin:top center}
+@keyframes sway{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}
+h1{font-size:clamp(28px,6vw,52px);background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{opacity:.75;max-width:540px;font-size:15px;line-height:1.5}
+.roleBtn{padding:20px 34px;font-size:20px;color:#0b1020;background:linear-gradient(135deg,var(--accent),#ffb347);box-shadow:0 8px 30px rgba(255,209,102,.35);transition:transform .15s;width:min(340px,90vw)}
+.roleBtn:active{transform:scale(.96)}
+.roleBtn.phone{background:linear-gradient(135deg,var(--accent2),#5aa9e6);box-shadow:0 8px 30px rgba(123,223,242,.3);color:#062033}
+#connStatus{font-size:14px;padding:8px 18px;border-radius:20px;background:var(--card);border:2px solid #2a3560;display:flex;align-items:center;gap:8px}
+#connStatus.on{border-color:var(--ok);color:var(--ok)}
+#connStatus.off{border-color:var(--bad);color:var(--bad)}
+#connStatus.wait{border-color:var(--accent);color:var(--accent)}
+.dot{width:10px;height:10px;border-radius:50%;background:currentColor;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+
+/* ---------- ТВ ---------- */
+#tvScreen{display:flex;flex-direction:column;height:100vh}
+#tvTop{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;gap:10px;flex-wrap:wrap}
+#sessionCodeBox{background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:8px 22px;font-size:clamp(20px,3vw,34px);letter-spacing:8px;color:var(--accent);font-weight:900}
+#sessionCodeBox small{display:block;font-size:11px;letter-spacing:2px;color:#8b96c9;font-weight:400}
+.tvBtns{display:flex;gap:10px}
+.tvBtns button{padding:10px 16px;font-size:14px;background:var(--card);color:var(--text);border:2px solid #2a3560;border-radius:12px}
+.tvBtns button:hover{border-color:var(--accent)}
+
+#stage{flex:1;position:relative;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;padding-bottom:2vh}
+#scaleWrap{position:relative;width:min(92vw,1100px);height:min(58vh,560px)}
+#pillar{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:16px;height:52%;background:linear-gradient(#3a467c,#232c55);border-radius:8px}
+#pillar::after{content:"";position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:120px;height:16px;background:#232c55;border-radius:8px}
+#pivot{position:absolute;left:50%;bottom:52%;transform:translate(-50%,50%);width:26px;height:26px;background:var(--accent);border-radius:50%;box-shadow:0 0 20px rgba(255,209,102,.6);z-index:5}
+#beam{position:absolute;left:6%;right:6%;bottom:calc(52% - 7px);height:14px;background:linear-gradient(#55629e,#39447a);border-radius:8px;transform-origin:center;transition:transform 1.6s cubic-bezier(.34,1.4,.44,1);z-index:4}
+.pan{position:absolute;top:0;width:0;display:flex;flex-direction:column;align-items:center}
+.pan.leftPan{left:4%}.pan.rightPan{right:4%}
+.string{width:4px;height:var(--strH,110px);background:linear-gradient(#6b77b5,#454f8a);border-radius:2px}
+.bowl{width:190px;height:64px;margin-top:-6px;background:radial-gradient(ellipse at 50% 0%,#ffdf8e,#c9962e 70%);border-radius:0 0 120px 120px;box-shadow:inset 0 -12px 24px rgba(0,0,0,.35),0 10px 25px rgba(0,0,0,.4);position:relative}
+.balls{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);display:flex;flex-wrap:wrap-reverse;justify-content:center;width:170px;gap:2px}
+.ball{width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff8,#ffd166 40%,#d99a1f);box-shadow:0 2px 5px rgba(0,0,0,.45);animation:pop .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+.panTag{position:absolute;top:calc(var(--strH,110px) + 66px);font-size:clamp(16px,2.4vw,26px);font-weight:800;letter-spacing:2px;white-space:nowrap}
+.leftPan .panTag{color:var(--left)}.rightPan .panTag{color:var(--right)}
+.countTag{position:absolute;top:calc(var(--strH,110px) + 98px);font-size:clamp(22px,3vw,34px);font-weight:900;color:#fff;background:rgba(255,255,255,.08);padding:2px 18px;border-radius:20px}
+
+#queue{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:10px;align-items:center;z-index:10;width:min(560px,94vw)}
+.wordCard{background:linear-gradient(145deg,#1d2547,#141a36);border:2px solid #3a467c;border-radius:18px;padding:14px 26px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:drop .5s cubic-bezier(.34,1.4,.64,1);max-width:94vw}
+@keyframes drop{from{transform:translateY(-80px) scale(.7);opacity:0}to{transform:none;opacity:1}}
+.wordCard .who{font-size:13px;color:#8b96c9;margin-bottom:4px}
+.wordCard .w{font-size:clamp(20px,3.4vw,36px);font-weight:800;color:var(--accent);word-break:break-word}
+.wordCard .meta{font-size:13px;color:var(--accent2);margin-top:4px}
+.pickRow{display:flex;gap:12px;justify-content:center;margin-top:10px}
+.pickRow button{padding:10px 26px;font-size:16px;border-radius:12px;color:#fff;transition:transform .12s}
+.pickRow button:active{transform:scale(.92)}
+.toLeft{background:linear-gradient(135deg,var(--left),#c94f7c)}
+.toRight{background:linear-gradient(135deg,var(--right),#2fa89f)}
+.skip{background:#2a3560;font-size:13px!important;padding:10px 16px!important}
+#emptyHint{position:absolute;top:6px;left:50%;transform:translateX(-50%);color:#5b669c;font-size:clamp(15px,2vw,20px);animation:pulse 2s infinite;z-index:9;white-space:nowrap}
+@keyframes pulse{50%{opacity:.4}}
+#flash{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(255,209,102,.25),transparent 60%);opacity:0;transition:opacity .4s}
+#flash.on{opacity:1;transition:opacity 0s}
+
+#feed{position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column-reverse;gap:6px;max-height:34vh;overflow:hidden;z-index:8;max-width:320px}
+.feedItem{background:rgba(21,27,52,.85);border-left:4px solid var(--accent);padding:7px 12px;border-radius:8px;font-size:14px;animation:drop .4s}
+.feedItem b{color:var(--accent)}
+.feedItem.L{border-left-color:var(--left)}.feedItem.R{border-left-color:var(--right)}
+
+/* ---------- ТЕЛЕФОН ---------- */
+#phoneScreen{max-width:480px;margin:0 auto;padding:22px 16px;display:flex;flex-direction:column;gap:16px;min-height:100vh}
+#phoneHead{display:flex;align-items:center;gap:10px}
+#phoneHead .code{background:var(--card);padding:8px 14px;border-radius:12px;border:2px solid #2a3560;color:var(--accent);letter-spacing:3px;font-weight:800}
+.backBtn{background:var(--card);color:var(--text);padding:8px 14px;border-radius:12px;border:2px solid #2a3560;font-size:14px}
+#joinBox{display:flex;flex-direction:column;gap:14px;align-items:center;flex:1;justify-content:center}
+.codeRow{display:flex;gap:10px;justify-content:center}
+.codeRow input{width:min(230px,70vw);padding:14px;font-size:26px;text-align:center;letter-spacing:10px;text-transform:uppercase;background:var(--card);border:2px solid #2a3560;border-radius:14px;color:var(--text);outline:none;font-weight:800}
+.codeRow input:focus{border-color:var(--accent)}
+.nameInput{width:min(320px,90vw);padding:14px;font-size:17px;text-align:center;background:var(--card);border:2px solid #2a3560;border-radius:14px;color:var(--text);outline:none}
+.nameInput:focus{border-color:var(--accent2)}
+.bigJoin{padding:16px 40px;font-size:19px;background:linear-gradient(135deg,var(--accent2),#5aa9e6);color:#062033;box-shadow:0 8px 30px rgba(123,223,242,.3)}
+.bigJoin:disabled{opacity:.4;cursor:not-allowed}
+.err{color:var(--bad);font-size:14px;min-height:18px;text-align:center}
+#wordArea{flex:1;display:flex;flex-direction:column;gap:12px}
+#wordInput{width:100%;padding:18px;font-size:22px;border-radius:16px;background:var(--card);border:2px solid #2a3560;color:var(--text);outline:none;text-align:center;resize:none}
+#wordInput:focus{border-color:var(--accent)}
+#counter{text-align:right;font-size:14px;color:#8b96c9}
+#counter.over{color:var(--bad);font-weight:700}
+#sendBtn{padding:18px;font-size:20px;background:linear-gradient(135deg,var(--accent),#ffb347);color:#0b1020;box-shadow:0 8px 24px rgba(255,209,102,.3)}
+#sendBtn:disabled{opacity:.4}
+#sentMsg{text-align:center;color:var(--ok);font-weight:700;font-size:17px;min-height:24px}
+#myHistory{display:flex;flex-direction:column;gap:8px}
+.histItem{background:var(--card);border-radius:12px;padding:10px 14px;font-size:15px;display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid #232c55}
+.histItem .st{font-size:13px;font-weight:700;white-space:nowrap}
+.st.queue{color:var(--accent)}.st.L{color:var(--left)}.st.R{color:var(--right)}
+
+@media (max-width:700px){
+  .bowl{width:120px;height:46px}.balls{width:106px}.ball{width:12px;height:12px}
+  .pan{--strH:70px!important}.countTag{top:calc(var(--strH,70px) + 72px)!important}.panTag{top:calc(var(--strH,70px) + 46px)!important}
+}
+</style>
+</head>
+<body>
+
+<!-- СТАРТ -->
+<div id="startScreen">
+  <div class="logo">⚖️</div>
+  <h1>Словесные весы</h1>
+  <p class="sub">Зрители отправляют слова с телефонов — каждая буква становится шариком на чаше весов. Ведущий на большом экране решает, на какую чашу положить слово.</p>
+  <div id="connStatus" class="wait"><span class="dot"></span><span id="connText">Подключение к сети…</span></div>
+  <button class="roleBtn" id="btnTv">📺 Экран ведущего (ТВ)</button>
+  <button class="roleBtn phone" id="btnPhone">📱 Я зритель (телефон)</button>
+</div>
+
+<!-- ТВ -->
+<div id="tvScreen" class="hidden">
+  <div id="tvTop">
+    <div id="sessionCodeBox"><small>КОД ДЛЯ ЗРИТЕЛЕЙ</small><span id="codeTv">------</span></div>
+    <div class="tvBtns">
+      <button id="btnSound">🔊 Звук</button>
+      <button id="btnReset">🔄 Сброс</button>
+      <button id="btnFull">⛶ Во весь экран</button>
+    </div>
+  </div>
+  <div id="stage">
+    <div id="queue"></div>
+    <div id="emptyHint">Ждём слова… зрители подключаются по коду 📱</div>
+    <div id="scaleWrap">
+      <div id="pillar"></div>
+      <div id="pivot"></div>
+      <div id="beam">
+        <div class="pan leftPan"><div class="string"></div><div class="bowl"></div><div class="balls" id="ballsL"></div><div class="panTag">◀ ЛЕВО</div><div class="countTag" id="cntL">0</div></div>
+        <div class="pan rightPan"><div class="string"></div><div class="bowl"></div><div class="balls" id="ballsR"></div><div class="panTag">ПРАВО ▶</div><div class="countTag" id="cntR">0</div></div>
+      </div>
+    </div>
+    <div id="feed"></div>
+    <div id="flash"></div>
+  </div>
+</div>
+
+<!-- ТЕЛЕФОН -->
+<div id="phoneScreen" class="hidden">
+  <div id="phoneHead">
+    <button class="backBtn" id="btnBack">←</button>
+    <div class="code" id="codePhone">------</div>
+    <div style="flex:1"></div>
+    <div style="opacity:.7;font-size:13px" id="meName"></div>
+  </div>
+  <div id="joinBox">
+    <h2 style="font-size:22px">Подключение к весам</h2>
+    <div class="codeRow"><input id="joinCode" maxlength="6" placeholder="КОД"></div>
+    <input class="nameInput" id="joinName" maxlength="20" placeholder="Твоё имя">
+    <div class="err" id="joinErr"></div>
+    <button class="bigJoin" id="btnJoin" disabled>Подключиться ⚖️</button>
+    <p style="font-size:12.5px;opacity:.55;max-width:280px;line-height:1.5">Введи код с экрана ведущего. Телефон и ТВ должны быть в интернете.</p>
+  </div>
+  <div id="wordArea" class="hidden">
+    <p style="text-align:center;opacity:.75;font-size:14px;line-height:1.5">Напиши слово — оно появится на экране ведущего.<br>Каждая буква = один шарик на весах. Максимум 50 букв.</p>
+    <textarea id="wordInput" rows="2" maxlength="60" placeholder="Твоё слово…"></textarea>
+    <div id="counter">0 / 50</div>
+    <button id="sendBtn" disabled>Отправить ➤</button>
+    <div id="sentMsg"></div>
+    <h3 style="margin-top:8px;color:var(--accent2)">Мои слова</h3>
+    <div id="myHistory"></div>
+  </div>
+</div>
+
+<script>
+/* ================= СЕТЬ: открытые MQTT-брокеры ================= */
+const BROKERS=[
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt'
+];
+let client=null, connected=false, brokerIdx=0;
+
+function connectMqtt(onReady){
+  setStatus('wait','Подключение к сети…');
+  const url=BROKERS[brokerIdx%BROKERS.length];
+  try{ if(client) client.end(true); }catch(e){}
+  client=mqtt.connect(url,{
+    clientId:'vesy_'+Math.random().toString(36).slice(2,10),
+    reconnectPeriod:2500, connectTimeout:8000, clean:true
+  });
+  client.on('connect',()=>{ connected=true; setStatus('on','В сети ✓'); if(onReady) onReady(); });
+  client.on('close',()=>{ connected=false; setStatus('wait','Переподключение…'); });
+  client.on('error',()=>{ brokerIdx++; });
+}
+function setStatus(cls,txt){
+  const el=$('connStatus'); if(!el) return;
+  el.className=cls; $('connText').textContent=txt;
+}
+connectMqtt();
+
+function subscribe(topic){ if(client&&connected) client.subscribe(topic,{qos:1}); }
+function publish(topic,obj){ if(client&&connected) client.publish(topic,JSON.stringify(obj),{qos:1}); }
+
+/* ================= СОСТОЯНИЕ ================= */
+let session=null, myName='', isTv=false;
+let state={queue:{}, placed:{}};   // авторитетное состояние (на ТВ)
+let lastQueueIds={};
+let hbTimer=null;
+
+const base = ()=> 'slovesnye-vesy/'+session;
+const topicIn = ()=> base()+'/in';
+const topicState = ()=> base()+'/state';
+
+function broadcastState(){
+  publish(topicState(), {t:'state', state:state, ts:Date.now()});
+}
+
+/* ================= ЗВУК ================= */
+let audioCtx=null, soundOn=true;
+function tone(f,dur=0.15,type='sine',vol=0.18,when=0){
+  if(!soundOn) return;
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type=type; o.frequency.value=f;
+    g.gain.setValueAtTime(vol, audioCtx.currentTime+when);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+when+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(audioCtx.currentTime+when); o.stop(audioCtx.currentTime+when+dur);
+  }catch(e){}
+}
+const sndNew=()=>{ tone(660,.12); tone(880,.15,'sine',.15,.1); };
+const sndPlace=()=>{ tone(520,.1,'triangle'); tone(700,.12,'triangle',.16,.08); };
+const sndReset=()=>{ tone(400,.2,'sine',.12); tone(300,.25,'sine',.1,.12); };
+
+/* ================= УТИЛИТЫ ================= */
+const $=id=>document.getElementById(id);
+function genCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
+function letterCount(w){ return (w.match(/[A-Za-zА-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ]/g)||[]).length || w.replace(/\s/g,'').length; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ================= ТВ ================= */
+function startTV(){
+  if(!connected){ alert('Нет связи с сетью. Проверьте интернет и попробуйте снова.'); return; }
+  session=genCode(); isTv=true;
+  state={queue:{}, placed:{}};
+  $('startScreen').classList.add('hidden');
+  $('phoneScreen').classList.add('hidden');
+  $('tvScreen').classList.remove('hidden');
+  $('codeTv').textContent=session;
+
+  const onReady=()=>{
+    subscribe(topicIn());
+    client.removeListener('message', tvOnMsg);
+    client.on('message', tvOnMsg);
+    broadcastState();
+    clearInterval(hbTimer);
+    hbTimer=setInterval(broadcastState, 3000); // heartbeat — телефоны проверяют код
+  };
+  if(connected) onReady(); else connectMqtt(onReady);
+  renderQueue(); renderBalls();
+}
+
+function tvOnMsg(t,payload){
+  if(t!==topicIn()) return;
+  let m; try{ m=JSON.parse(payload); }catch(e){ return; }
+  if(m.t==='queue' && m.word && m.name){
+    const id='q'+Date.now()+Math.random().toString(36).slice(2,5);
+    state.queue[id]={word:String(m.word).slice(0,80), name:String(m.name).slice(0,20), ts:Date.now()};
+    sndNew(); flash();
+    renderQueue(); broadcastState();
+  }
+}
+
+function placeWord(id, side){
+  const it=state.queue[id]; if(!it) return;
+  delete state.queue[id];
+  state.placed['p'+Date.now()+Math.random().toString(36).slice(2,5)]={...it, side};
+  sndPlace(); flash();
+  renderQueue(); renderBalls(); broadcastState();
+}
+function skipWord(id){
+  if(!state.queue[id]) return;
+  delete state.queue[id];
+  renderQueue(); broadcastState();
+}
+function resetAll(){
+  if(!confirm('Обнулить весы? Все шарики исчезнут.')) return;
+  state={queue:{}, placed:{}};
+  sndReset();
+  renderQueue(); renderBalls(); broadcastState();
+}
+
+function renderQueue(){
+  const box=$('queue'); box.innerHTML='';
+  const ids=Object.keys(state.queue).sort((a,b)=>state.queue[a].ts-state.queue[b].ts);
+  $('emptyHint').style.display=ids.length?'none':'block';
+  ids.slice(0,3).forEach(id=>{
+    const it=state.queue[id], n=letterCount(it.word);
+    const card=document.createElement('div'); card.className='wordCard';
+    card.innerHTML=`<div class="who">✍️ ${escapeHtml(it.name||'Аноним')}</div>
+      <div class="w">«${escapeHtml(it.word)}»</div>
+      <div class="meta">${n} букв → ${n} шариков</div>
+      <div class="pickRow">
+        <button class="toLeft">◀ На лево</button>
+        <button class="skip">✕</button>
+        <button class="toRight">На право ▶</button>
+      </div>`;
+    card.querySelector('.toLeft').onclick=()=>placeWord(id,'L');
+    card.querySelector('.toRight').onclick=()=>placeWord(id,'R');
+    card.querySelector('.skip').onclick=()=>skipWord(id);
+    box.appendChild(card);
+  });
+}
+
+function renderBalls(){
+  let L=0,R=0;
+  Object.values(state.placed).forEach(it=>{ if(it.side==='L') L+=letterCount(it.word); else R+=letterCount(it.word); });
+  const bl=$('ballsL'), br=$('ballsR');
+  if(bl.children.length!==L||br.children.length!==R){
+    bl.innerHTML=''; br.innerHTML='';
+    for(let i=0;i<L;i++){ const b=document.createElement('div'); b.className='ball'; bl.appendChild(b); }
+    for(let i=0;i<R;i++){ const b=document.createElement('div'); b.className='ball'; br.appendChild(b); }
+    $('cntL').textContent=L; $('cntR').textContent=R;
+    const diff=Math.max(-22,Math.min(22,(R-L)*3));
+    $('beam').style.transform=`rotate(${diff}deg)`;
+  }
+  const feed=$('feed'); feed.innerHTML='';
+  Object.values(state.placed).sort((a,b)=>b.ts-a.ts).slice(0,6).forEach(it=>{
+    const d=document.createElement('div');
+    d.className='feedItem '+it.side;
+    d.innerHTML=`<b>«${escapeHtml(it.word)}»</b> <span style="opacity:.7">· ${escapeHtml(it.name||'')} · ${it.side==='L'?'◀':'▶'} · ${letterCount(it.word)} шт</span>`;
+    feed.appendChild(d);
+  });
+}
+function flash(){ const f=$('flash'); f.classList.add('on'); setTimeout(()=>f.classList.remove('on'),60); }
+
+/* клавиатура ведущего: ← лево, → право, Delete пропустить */
+document.addEventListener('keydown',e=>{
+  if($('tvScreen').classList.contains('hidden')) return;
+  const ids=Object.keys(state.queue).sort((a,b)=>state.queue[a].ts-state.queue[b].ts);
+  if(!ids.length) return;
+  if(e.key==='ArrowLeft') placeWord(ids[0],'L');
+  else if(e.key==='ArrowRight') placeWord(ids[0],'R');
+  else if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); skipWord(ids[0]); }
+});
+
+/* ================= ТЕЛЕФОН ================= */
+let phoneJoined=false, seenPlaced={}, joinTimer=null;
+
+function startPhone(){
+  $('startScreen').classList.add('hidden');
+  $('tvScreen').classList.add('hidden');
+  $('phoneScreen').classList.remove('hidden');
+}
+
+$('joinCode').addEventListener('input',e=>{
+  e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  $('btnJoin').disabled = e.target.value.length!==6 || !$('joinName').value.trim();
+});
+$('joinName').addEventListener('input',()=>{
+  $('btnJoin').disabled = $('joinCode').value.length!==6 || !$('joinName').value.trim();
+});
+
+$('btnJoin').onclick=()=>{
+  if(!connected){ $('joinErr').textContent='Нет связи с сетью. Проверь интернет.'; return; }
+  session=$('joinCode').value.trim().toUpperCase();
+  myName=$('joinName').value.trim();
+  $('joinErr').textContent='Проверяем код…';
+
+  const onReady=()=>{
+    subscribe(topicState());
+    client.removeListener('message', phoneOnMsg);
+    client.on('message', phoneOnMsg);
+    // ждём heartbeat от ТВ (до 4 сек)
+    clearTimeout(joinTimer);
+    joinTimer=setTimeout(()=>{ if(!phoneJoined) $('joinErr').textContent='Сессия не найдена. Проверь код на экране ведущего.'; }, 4000);
+  };
+  if(connected) onReady(); else connectMqtt(onReady);
+};
+
+function phoneOnMsg(t,payload){
+  if(t!==topicState()) return;
+  let m; try{ m=JSON.parse(payload); }catch(e){ return; }
+  if(m.t!=='state'||!m.state) return;
+
+  if(!phoneJoined){
+    phoneJoined=true; clearTimeout(joinTimer);
+    $('joinBox').classList.add('hidden');
+    $('wordArea').classList.remove('hidden');
+    $('codePhone').textContent=session;
+    $('meName').textContent='👤 '+myName;
+  }
+  // статусы моих слов
+  Object.values(m.state.placed||{}).forEach(it=>{
+    const key=it.ts+'_'+it.word;
+    if(it.name===myName && !seenPlaced[key]){
+      seenPlaced[key]=1;
+      $('sentMsg').textContent=`«${it.word}» принято → ${it.side==='L'?'◀ лево':'право ▶'}!`;
+      setTimeout(()=>{ if($('sentMsg').textContent.includes(it.word)) $('sentMsg').textContent=''; },4000);
+    }
+  });
+  renderMyHistory(m.state);
+}
+
+function renderMyHistory(st){
+  const box=$('myHistory'); box.innerHTML='';
+  Object.values(st.queue||{}).filter(it=>it.name===myName).forEach(it=>{
+    const d=document.createElement('div'); d.className='histItem';
+    d.innerHTML=`<span>«${escapeHtml(it.word)}»</span><span class="st queue">⏳ на экране</span>`;
+    box.appendChild(d);
+  });
+  Object.values(st.placed||{}).filter(it=>it.name===myName)
+    .sort((a,b)=>b.ts-a.ts).forEach(it=>{
+      const d=document.createElement('div'); d.className='histItem';
+      d.innerHTML=`<span>«${escapeHtml(it.word)}»</span><span class="st ${it.side}">${it.side==='L'?'◀ лево':'право ▶'} · ${letterCount(it.word)} шт</span>`;
+      box.appendChild(d);
+    });
+}
+
+$('wordInput').addEventListener('input',e=>{
+  let v=e.target.value, letters=0, out='';
+  for(const ch of v){
+    if(/[A-Za-zА-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ]/.test(ch)){ if(letters<50){ out+=ch; letters++; } }
+    else if(/\s/.test(ch)){ out+=ch; }
+    else { out+=ch; }
+  }
+  e.target.value=out;
+  const cnt=letterCount(out);
+  $('counter').textContent=`${cnt} / 50`;
+  $('counter').classList.toggle('over', cnt>=50);
+  $('sendBtn').disabled = cnt===0 || !phoneJoined;
+});
+$('sendBtn').onclick=()=>{
+  const w=$('wordInput').value.trim();
+  if(!w||!phoneJoined) return;
+  publish(topicIn(), {t:'queue', word:w, name:myName});
+  $('wordInput').value=''; $('counter').textContent='0 / 50'; $('sendBtn').disabled=true;
+  $('sentMsg').textContent='Отправлено! Жди экран ведущего ⚖️';
+  tone(880,.12);
+  setTimeout(()=>{ if($('sentMsg').textContent.includes('Отправлено')) $('sentMsg').textContent=''; },3000);
+};
+
+/* ================= КНОПКИ ================= */
+$('btnTv').onclick=startTV;
+$('btnPhone').onclick=startPhone;
+$('btnBack').onclick=()=>{
+  if(client) client.removeListener('message', phoneOnMsg);
+  phoneJoined=false;
+  $('phoneScreen').classList.add('hidden');
+  $('startScreen').classList.remove('hidden');
+};
+$('btnFull').onclick=()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); };
+$('btnReset').onclick=resetAll;
+$('btnSound').onclick=e=>{ soundOn=!soundOn; e.target.textContent=soundOn?'🔊 Звук':'🔇 Звук'; };
+</script>
+</body>
+</html>
